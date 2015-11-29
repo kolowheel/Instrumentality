@@ -3,10 +3,17 @@
 # ~~~~
 
 # Home page
-GET         /                     controllers.Application.index
-POST        /                     controllers.Application.upload
-GET         /uploaded             controllers.Application.redirected
-GET         /files                controllers.Application.files
-GET         /files/:fileId        controllers.Application.file(fileId :String)
+GET         /                          controllers.Application.index
+POST        /                          controllers.Application.upload
+GET         /uploaded                  controllers.Application.redirected
+GET         /files/:fileId             controllers.Application.file(fileId :String)
+GET         /setuser/:user             controllers.Application.person(user :String)
+GET         /users/:userId/jobs        controllers.Application.userJobs(userId:String)
+GET         /newjobpage                controllers.Application.newjobpage
+POST        /newjobpage                controllers.Application.newjob
+GET         /currentJob                controllers.Application.currentUserJobs
+POST        /jobs/:jobid/files         controllers.Application.attachFilesToJob(jobid :String)
+GET         /jobs/:jobid/files         controllers.Application.files(jobid :String)
 # Map static resources from the /public folder to the /assets URL path
-GET         /assets/*file         controllers.Assets.versioned(path="/public", file: Asset)
+GET         /assets/*file              controllers.Assets.versioned(path="/public", file: Asset)
+

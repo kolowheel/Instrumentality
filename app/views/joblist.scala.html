@@ -1,4 +1,5 @@
-@(jobs: Seq[model.Job])(implicit req: Request[AnyContent])
+@(jobs: Seq[model.Job])
+
 <!DOCTYPE html>
 
 <html lang="en">
@@ -10,17 +11,15 @@
     </head>
     <body>
         <ul>
-            @req.session.get("user_id") match {
-                case Some(id) => {    <a href="@routes.Application.userJobs(id)">My page</a>}
-                case None => {""}
-            }
-
-
-            @for(job <- jobs) {
-                <li>
-                    <a href="@routes.Application.files(job.id)"> @job.name</a>
-                </li>
-            }
+        @jobs.map { job =>
+            <li>Id : @job.id | Name: @job.name |
+                @helper.form(action = routes.Application.attachFilesToJob(job.id), 'enctype -> "multipart/form-data") {
+                    <input type="file" name="picture" multiple="">
+                    <div>
+                        <input type="submit" class="btn">
+                    </div>
+                }</li>
+        }
         </ul>
     </body>
 </html>

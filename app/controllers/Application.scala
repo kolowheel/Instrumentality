@@ -2,44 +2,128 @@ package controllers
 
 import javax.inject.Inject
 
-import play.api.mvc.MultipartFormData.FilePart
-import reactivemongo.api.CursorProducer
+import model._
+import play.api.Logger
+import play.api.libs.concurrent.Execution.Implicits.defaultContext
+import play.api.libs.json._
+import play.api.mvc.{Action, Controller}
+import play.modules.reactivemongo.json._
+import play.modules.reactivemongo.json.collection._
+import play.modules.reactivemongo.{MongoController, ReactiveMongoApi, ReactiveMongoComponents}
 import reactivemongo.api.ReadPreference.Primary
-import reactivemongo.api.gridfs.{GridFS, ReadFile}
+import reactivemongo.api.gridfs.ReadFile
 import reactivemongo.bson._
 
 import scala.concurrent.Future
-
-import play.api.Logger
-import play.api.mvc.{Action, Result, Controller}
-import play.api.libs.concurrent.Execution.Implicits.defaultContext
-import play.api.libs.functional.syntax._
-import play.api.libs.json._
-
-import scala.util.{Failure, Try, Success}
-
-import play.modules.reactivemongo.{// ReactiveMongo Play2 plugin
-MongoController,
-ReactiveMongoApi,
-ReactiveMongoComponents
-}
-
-import play.modules.reactivemongo.json._
-import play.modules.reactivemongo.json.collection._
+import scala.util.Try
 
 class Application @Inject()(val reactiveMongoApi: ReactiveMongoApi)
   extends Controller with MongoController with ReactiveMongoComponents {
 
   import MongoController.readFileReads
 
+  val info = (x: String) => Logger.logger.info(x)
+
   type JSONReadFile = ReadFile[JSONSerializationPack.type, JsString]
   val fsParser = gridFSBodyParser(reactiveMongoApi.gridFS)
 
   def persons: JSONCollection = db.collection[JSONCollection]("persons")
 
-  def index = Action { req =>
-    Ok(views.html.main()).withSession(req.session +("user_id", "5623fa878465af3d073eb1ea"))
+
+  def jobfiles: JSONCollection = db.collection[JSONCollection]("jobfiles")
+
+  def jobs: JSONCollection = db.collection[JSONCollection]("jobs")
+
+  def filesCol: JSONCollection = db.collection[JSONCollection]("fs.files")
+
+  def index = Action.async { implicit req =>
+    implicit val jomfmt = JsonMongoFormats.mongoFormats(Json.format[Job])
+    jobs.
+      find(Json.obj()).
+      cursor[Job]().
+      collect[List]().
+      map(x => Ok(views.html.main(x)).withSession(req.session +("user_id", "5623fa878465af3d073eb1ea")))
+
   }
+
+  def userPage(usrId: String) = Action.async {
+    implicit val jomfmt = JsonMongoFormats.mongoFormats(Json.format[Job])
+    val userjobs = jobs.
+      find(Json.obj()).
+      cursor[Job]().
+      collect[List]()
+    val user = personById(usrId)
+    for {
+      jobs <- userjobs
+      usr <- user
+    } yield {
+      Ok(views.html.user(usr, jobs))
+    }
+
+  }
+
+  // todo dont use in production
+  def person(name: String) = Action.async({
+    implicit req =>
+      personByName(name).map { id =>
+        Ok(views.html.main(Seq(Job("", "", "", "")))).withSession(req.session +("user_id", id))
+      }.recover {
+        case x => Ok("Cookie is not setted" + x.toString)
+      }
+  })
+
+
+  def newjobpage() = Action {
+    Ok(views.html.createjob())
+  }
+
+  def newjob = Action.async {
+    req =>
+      val future: Future[String] = req.session.get("user_id") match {
+        case Some(userid) => Future.successful(userid)
+        case None => Future.failed(new IllegalStateException("You are non logged in"))
+      }
+      future.flatMap { userid =>
+        createJob(Job(ownerid = userid,
+          name = req.body.asFormUrlEncoded.get.get("name").get.head,
+          form = req.body.asFormUrlEncoded.get.get("form").get.head))
+      }.map {
+        success =>
+          if (success) {
+            Ok("Job has been created")
+          } else {
+            BadRequest("Some error while creating job")
+          }
+      }.recover {
+        case x => InternalServerError
+      }
+  }
+
+  def attachFilesToJob(jobid: String) = Action.async(fsParser) { request =>
+    val futureFile =
+      Future.sequence(request.body.files.map(_.ref))
+    futureFile.flatMap { files =>
+      info("files")
+      Future
+        .sequence(files.map(file => createJobFile(
+        JobFile.p(
+          parentJobId = jobid,
+          FileRecord(file.id.as[String],
+            file.filename.getOrElse("Unknown"),
+            file.length)
+        ))))
+        .map(x => Redirect("/uploaded", Map("msg" -> Seq("OK"))))
+        .recover {
+        case e: Throwable =>
+          println(e)
+          Redirect("/uploaded", Map("msg" -> Seq("Error")))
+      }
+    }.recover {
+      case e: Throwable =>
+        InternalServerError(e.getMessage)
+    }
+  }
+
 
   def redirected = Action { req =>
     req.queryString.get("msg") match {
@@ -48,25 +132,29 @@ class Application @Inject()(val reactiveMongoApi: ReactiveMongoApi)
     }
   }
 
-  def files = Action.async { req =>
-    val userId = req.session.get("user_id").get
-    getFileIds(userId)
-      .map(_.flatMap(x => Future(Ok(x.mkString("\n")))))
-      .getOrElse(Future(BadRequest("")))
-
+  def files(jobid: String) = Action.async { req =>
+    Logger.logger.info("HERE")
+    getFiles(jobid)
+      .flatMap(x => {
+      println(x.size)
+      Future(Ok(x.map(_.toString).mkString("\n")))
+    })
   }
 
   def file(fileId: String) = Action.async { req =>
-    isHasFile(req.session.get("user_id").get, fileId).flatMap {
-      allow =>
-        if (allow) {
-          val file = reactiveMongoApi.gridFS
-            .find[BSONDocument, JSONReadFile](BSONDocument("_id" -> fileId))
-          serve[JsString, JSONReadFile](reactiveMongoApi.gridFS)(file, CONTENT_DISPOSITION_INLINE)
-        } else {
-          Future(Ok("Not allowed"))
-        }
-    }
+    //    val file = reactiveMongoApi.gridFS
+    //      .find[BSONDocument, JSONReadFile](BSONDocument("_id" -> fileId))
+    //    (for {
+    //      Some(x) <- getFile(fileId)
+    //      served <- serve[JsString, JSONReadFile](reactiveMongoApi.gridFS)(file, CONTENT_DISPOSITION_INLINE)
+    //    } yield {
+    //        served.withHeaders("Content-lenght" -> x.length.toString)
+    //      }).recover {
+    //      case e: Throwable => Logger.logger.info("SOME ERROR"); Ok("ERROr")
+    //    }
+    //    serve[JsString, JSONReadFile](reactiveMongoApi.gridFS)(file, CONTENT_DISPOSITION_INLINE)
+
+    serve[JsString, JSONReadFile](reactiveMongoApi.gridFS)(reactiveMongoApi.gridFS.find[BSONDocument, JSONReadFile](BSONDocument("_id" -> fileId)))
   }
 
 
@@ -81,12 +169,12 @@ class Application @Inject()(val reactiveMongoApi: ReactiveMongoApi)
           (for {
             result <- futureRes
           } yield {
-            if (result.ok)
-              Redirect("/uploaded", Map("msg" -> Seq("OK")))
-            else {
-              Redirect("/uploaded", Map("msg" -> Seq("Error")))
-            }
-          }).recover {
+              if (result.ok)
+                Redirect("/uploaded", Map("msg" -> Seq("OK")))
+              else {
+                Redirect("/uploaded", Map("msg" -> Seq("Error")))
+              }
+            }).recover {
             case e: Throwable =>
               Redirect("/uploaded", Map("msg" -> Seq("Error")))
           }
@@ -96,27 +184,88 @@ class Application @Inject()(val reactiveMongoApi: ReactiveMongoApi)
     }
   }
 
+  def userJobs(userid: String) = Action.async {
+    jobsById(userid).map(x => Ok(views.html.joblist(x)))
+  }
+
+  def currentUserJobs = Action.async {
+    req =>
+      jobsById(req.session.get("user_id").get).map(x => Ok(views.html.joblist(x)))
+  }
+
 
   // -- queries ----
-  def isHasFile(userId: String, fileId: String) = {
+
+  def jobsById(userid: String) = {
+    jobs.find(BSONDocument("ownerid" -> userid))
+      .cursor[JsValue]()
+      .collect[Seq]()
+      .map {
+      jsvalues =>
+        jsvalues.map {
+          value =>
+            Job((value \ "_id" \ "$oid").as[String],
+              (value \ "ownerid").as[String],
+              (value \ "name").as[String],
+              (value \ "form").as[String])
+        }
+    }
+  }
+
+
+  def personById(id: String): Future[User] = {
+    implicit val userFrmt = JsonMongoFormats.mongoReads(Json.format[model.User])
+    persons.
+      find(BSONDocument("_id" -> BSONObjectID(id))).
+      one[model.User].flatMap {
+      case Some(usr) => Future.successful(usr)
+      case _ => Future.failed[model.User](new IllegalArgumentException())
+    }
+  }
+
+  def personByName(name: String): Future[String] =
+    persons.find(BSONDocument("name" -> "test1"))
+      .one[JsValue]
+      .flatMap {
+      case Some(json) => Future.successful((json \ "_id" \ "$oid").as[String])
+      case None => Future.failed(new NoSuchElementException(s"Element with name:test1 is not present"))
+    }
+
+  def isHasFile(userId: String, fileId: String) =
     persons.find(BSONDocument("_id" -> BSONObjectID(userId),
       "pendingFiles" -> BSONDocument(
         "$elemMatch" -> BSONDocument("$eq" -> BSONString(fileId))
-      ))).one[BSONValue].map(_.isDefined)
-  }
-  
-  def getFiles(ids:Seq[String]) = {
+      ))).one[BSONValue]
 
+  import play.api.libs.json.Reads._
+  import play.api.libs.json._
+
+  def getFiles(job: String): Future[Seq[JobFile]] = {
+    import model.JsonFormats._
+    implicit val jobFile: Format[JobFile] = JsonMongoFormats.mongoFormats(Json.format[JobFile])
+    jobfiles
+      .find(BSONDocument("parentJobId" -> job))
+      .cursor[JsValue]()
+      .collect[Seq]()
+      .map { jsList =>
+      jsList.map(x => {
+        x.asOpt[JobFile]
+      }).collect { case Some(x) => x }
+    }
   }
 
-  def getFileIds(userId: String) = {
+
+  def getFileIds(userId: String): Try[Future[Seq[String]]] = {
+
     import play.modules.reactivemongo.json._
+
     BSONObjectID.parse(userId).map {
       id => persons.find(BSONDocument("_id" -> id), BSONDocument("pendingFiles" -> 1))
         .one[JsValue](Primary)
         .map(_.map(x => (x \ "pendingFiles").as[Seq[String]]).getOrElse(Seq()))
     }
   }
+
 
   def updateQuery(userId: String, fileIds: Seq[String]) = {
     val selector = BSONDocument("_id" -> BSONObjectID(userId))
@@ -129,4 +278,20 @@ class Application @Inject()(val reactiveMongoApi: ReactiveMongoApi)
     )
     persons.update(selector, modifier)
   }
+
+  def createJobFile(jobFile1: JobFile) = {
+    import play.modules.reactivemongo.json._
+    import play.modules.reactivemongo.json.collection._
+    import model.JsonFormats._
+    import play.modules.reactivemongo.json._
+    println(jobFile1)
+    implicit val jobFile: Format[JobFile] = JsonMongoFormats.mongoFormats(Json.format[JobFile])
+    implicit val jobfileo: OFormat[JobFile] = OFormat.apply(jobFile.reads, jobFile.writes(_).as[JsObject])
+    jobfiles.insert(jobFile1).map(_.ok)
+  }
+
+  def createJob(job: Job) =
+    jobs.insert(BSONDocument("name" -> job.name, "ownerid" -> job.ownerid, "form" -> job.form)).map(_.ok)
+
+
 }
