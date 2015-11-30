@@ -10,11 +10,12 @@ package object model extends App {
 
   sealed trait State
 
-  case object Done extends State
 
   case object Free extends State
 
   case class Taken(userId: String) extends State
+
+  case class Done(userId: String) extends State
 
   case class User(id: ID = DefaultId, name: String)
 
@@ -26,12 +27,12 @@ package object model extends App {
                      parentJobId: JobID,
                      fileRecordId: FileRecord,
                      state: State,
-                     filledForm: String)
+                     filledForm: Option[String])
 
   object JobFile {
 
     def p(parentJobId: JobID, fileRecord: FileRecord) = {
-      JobFile(BSONObjectID.generate.stringify, parentJobId, fileRecord, Free, "")
+      JobFile(BSONObjectID.generate.stringify, parentJobId, fileRecord, Free, None)
     }
   }
 

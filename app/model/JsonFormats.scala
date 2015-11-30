@@ -10,6 +10,8 @@ object JsonFormats {
 
 
   import model.State
-  implicit val fileRecordFormat:Format[FileRecord] = Json.format[FileRecord]
-  implicit val stateFormat: Format[State] = Variants.format[State]
+  import play.api.libs.json._
+
+  implicit val fileRecordFormat: Format[FileRecord] = Json.format[FileRecord]
+  implicit val stateFormat: Format[State] = Variants.format[State]((__ \ "type").format[String])
 }

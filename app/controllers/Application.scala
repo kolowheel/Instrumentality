@@ -7,6 +7,7 @@ import play.api.Logger
 import play.api.libs.concurrent.Execution.Implicits.defaultContext
 import play.api.libs.json._
 import play.api.mvc.{Action, Controller}
+import play.json.extra.Variants
 import play.modules.reactivemongo.json._
 import play.modules.reactivemongo.json.collection._
 import play.modules.reactivemongo.{MongoController, ReactiveMongoApi, ReactiveMongoComponents}
@@ -136,8 +137,7 @@ class Application @Inject()(val reactiveMongoApi: ReactiveMongoApi)
     Logger.logger.info("HERE")
     getFiles(jobid)
       .flatMap(x => {
-      println(x.size)
-      Future(Ok(x.map(_.toString).mkString("\n")))
+      Future(Ok(views.html.files(x)))
     })
   }
 
@@ -154,9 +154,9 @@ class Application @Inject()(val reactiveMongoApi: ReactiveMongoApi)
     //    }
     //    serve[JsString, JSONReadFile](reactiveMongoApi.gridFS)(file, CONTENT_DISPOSITION_INLINE)
 
+    println("DOWNLOADING")
     serve[JsString, JSONReadFile](reactiveMongoApi.gridFS)(reactiveMongoApi.gridFS.find[BSONDocument, JSONReadFile](BSONDocument("_id" -> fileId)))
   }
-
 
   def upload = Action.async(fsParser) { request =>
     val futureFile =
@@ -193,8 +193,39 @@ class Application @Inject()(val reactiveMongoApi: ReactiveMongoApi)
       jobsById(req.session.get("user_id").get).map(x => Ok(views.html.joblist(x)))
   }
 
+  def takeFile(fileid: String) = Action.async {
+    req =>
+      println(req.session.get("user_id"))
+      updateStatus(fileid, Free, Taken(req.session.get("user_id").get)).map( i => Ok(i.toString))
+  }
+
+  def submitForm(fileid : String) = Action{
+    req => 
+  }
+
 
   // -- queries ----
+
+  import play.api.libs.json.Reads._
+  import play.api.libs.json._
+
+
+  def updateStatus(jobFileid: String, prevState: State, state: State) = {
+
+    import model.JsonFormats._
+    import play.api.libs.json._
+    import play.modules.reactivemongo.json._
+    import play.modules.reactivemongo.json.collection._
+    import play.modules.reactivemongo.json._
+    jobfiles.update(
+      BSONDocument("fileRecordId.id" -> jobFileid, "state" -> Json.toJson(prevState)),
+      BSONDocument("$set" -> BSONDocument("state" -> Json.toJson(state)))
+    )
+  }
+
+  def submitFormQuery(userid: String, jobfileid: String, form: String) = {
+
+  }
 
   def jobsById(userid: String) = {
     jobs.find(BSONDocument("ownerid" -> userid))
@@ -237,8 +268,6 @@ class Application @Inject()(val reactiveMongoApi: ReactiveMongoApi)
         "$elemMatch" -> BSONDocument("$eq" -> BSONString(fileId))
       ))).one[BSONValue]
 
-  import play.api.libs.json.Reads._
-  import play.api.libs.json._
 
   def getFiles(job: String): Future[Seq[JobFile]] = {
     import model.JsonFormats._
@@ -280,10 +309,11 @@ class Application @Inject()(val reactiveMongoApi: ReactiveMongoApi)
   }
 
   def createJobFile(jobFile1: JobFile) = {
-    import play.modules.reactivemongo.json._
-    import play.modules.reactivemongo.json.collection._
+    //    import play.modules.reactivemongo.json._
+    //    import play.modules.reactivemongo.json.collection._
+    import model.JsonMongoFormats._
     import model.JsonFormats._
-    import play.modules.reactivemongo.json._
+    //    import play.modules.reactivemongo.json._
     println(jobFile1)
     implicit val jobFile: Format[JobFile] = JsonMongoFormats.mongoFormats(Json.format[JobFile])
     implicit val jobfileo: OFormat[JobFile] = OFormat.apply(jobFile.reads, jobFile.writes(_).as[JsObject])

@@ -12,14 +12,25 @@
     <body>
         <ul>
         @jobs.map { job =>
-            <li>Id : @job.id | Name: @job.name |
+            <li>
+                <div> Id : @job.id | Name: @job.name </div>
+                <div>
+                @Html(job.form)
+                </div>
+                <div>
                 @helper.form(action = routes.Application.attachFilesToJob(job.id), 'enctype -> "multipart/form-data") {
                     <input type="file" name="picture" multiple="">
                     <div>
                         <input type="submit" class="btn">
                     </div>
-                }</li>
+                }
+                </div>
+                <a href="@routes.Application.files(job.id)">files</a>
+            </li>
         }
         </ul>
     </body>
 </html>
+
+
+

@@ -1,4 +1,4 @@
-@(jobs: Seq[model.Job])(implicit req: Request[AnyContent])
+@(files:Seq[model.JobFile])
 <!DOCTYPE html>
 
 <html lang="en">
@@ -10,16 +10,11 @@
     </head>
     <body>
         <ul>
-            @req.session.get("user_id") match {
-                case Some(id) => {
-                    <a href="@routes.Application.userJobs(id)">My page</a>
-                }
-                case None => {""}
-            }
-
-            @for(job <- jobs) {
+            @for(file <- files) {
                 <li>
-                    <a href="@routes.Application.files(job.id)"> @job.name</a>
+
+                    <a href="@routes.Application.file(file.fileRecordId.id)">
+                        @file.fileRecordId.filename | @file.fileRecordId.length | @file.state.toString</a>
                 </li>
             }
         </ul>
