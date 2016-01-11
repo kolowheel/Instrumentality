@@ -4,11 +4,8 @@
 
 # Home page
 GET         /                                 controllers.Application.index
-POST        /                                 controllers.Application.upload
-GET         /uploaded                         controllers.Application.redirected
 GET         /files/:fileId                    controllers.Application.file(fileId :String)
-GET         /setuser/:user                    controllers.Application.person(user :String)
-GET         /users/:userId/jobs               controllers.Application.userJobs(userId:String)
+GET         /takenFiles                       controllers.Application.takenByUserFiles
 GET         /newjobpage                       controllers.Application.newjobpage
 POST        /newjobpage                       controllers.Application.newjob
 GET         /currentJob                       controllers.Application.currentUserJobs
@@ -16,7 +13,11 @@ POST        /jobs/:jobid/files                controllers.Application.attachFile
 GET         /jobs/:jobid/files                controllers.Application.files(jobid :String)
 POST        /files/:fileid/form               controllers.Application.submitForm(fileid : String)
 POST        /files/:fileid/state/taken        controllers.Application.takeFile(fileid)
+GET         /report/:jobid                    controllers.Application.report(jobid :String)
+
+GET         /signIn                           controllers.SignInOutController.signIn
+GET         /signOut                          controllers.SignInOutController.signOut
+GET         /authenticate/:provider           controllers.SocialAuthController.authenticate(provider)
 
 # Map static resources from the /public folder to the /assets URL path
 GET         /assets/*file                     controllers.Assets.versioned(path="/public", file: Asset)
-

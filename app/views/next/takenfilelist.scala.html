@@ -1,0 +1,33 @@
+@import model._
+@(files: Seq[(JobFile,Job)])(implicit user: model.User)
+
+@next.main {
+    <h2 class="text-center">Taken files</h2>
+    <div>
+    </div>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Job</th>
+                <th>Form</th>
+            </tr>
+        </thead>
+        <tbody>
+        @for((file,job) <- files) {
+            <tr>
+                <td><a href="@routes.Application.file(file.fileRecordId.id)">@file.fileRecordId.filename</a></td>
+                <td>@job.name</td>
+                <td>
+                @helper.form(action = routes.Application.submitForm(file.fileRecordId.id), 'enctype -> "x-www-form-urlencoded") {
+                    @Html(job.form)
+                    <div>
+                        <input type="submit" class="btn">
+                    </div>
+                }
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

@@ -1,0 +1,25 @@
+@(jobs: Seq[model.Job])(name: String)(implicit user: model.User)
+
+@next.main {
+    <div class="container col-md-10 col-centered">
+        <h2 class="text-center">@name</h2>
+        @for(job <- jobs) {
+
+            <div class="list-group">
+                <a href="@routes.Application.files(job.id)" class="list-group-item">
+                    <h4 class="list-group-item-heading">@job.name</h4>
+                    <p class="list-group-item-text">@job.description</p>
+                </a>
+
+                @if(job.ownerid == user.id && name == "My jobs") {
+                    @helper.form(action = routes.Application.attachFilesToJob(job.id), 'enctype -> "multipart/form-data") {
+                        <input type="file" name="picture" multiple="">
+                        <div>
+                            <input type="submit" class="btn">
+                        </div>
+                    }
+                }
+            </div>
+        }
+    </div>
+}
