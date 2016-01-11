@@ -1,0 +1,26 @@
+<html>
+    <head>
+        <style>
+        div {
+        width: 300px;
+        height: 300px;
+
+        position: absolute;
+        top:0;
+        bottom: 0;
+        left: 0;
+        right: 0;
+
+        margin: auto;
+        }
+        </style>
+    </head>
+    <body>
+        <div style="font-size: 45px;position: fixed">
+            Sign in with : <br>
+            <a href="@routes.SocialAuthController.authenticate("github")">
+                <img src="@routes.Assets.versioned("images/github.png")">
+            </a>
+        </div>
+    </body>
+</html>

@@ -1,0 +1,45 @@
+@import model.Free
+@(files: Seq[model.JobFile], job: model.Job)(implicit user: model.User)
+@next.mainn {
+    <h2 class="text-center">Files for job: @job.name</h2>
+    <a href="@routes.Application.report(job.id)">Generate report</a>
+    <div>
+    </div>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Job</th>
+                <th>Take</th>
+                @if(job.ownerid == user.id) {
+                    <th>State</th>
+                }
+                @*<th>Fill form</th>*@
+                @*<th>Free</th>*@
+            </tr>
+        </thead>
+        <tbody>
+        @for(file <- files.filter { x => (job.ownerid == user.id) || (x.state == Free) }) {
+            <tr>
+                <td><a href="@routes.Application.file(file.fileRecordId.id)">@file.fileRecordId.filename</a></td>
+                <td>@job.name</td>
+                <td>
+                @file.state match {
+                    case model.Free => {
+                        @helper.form(action = routes.Application.takeFile(file.fileRecordId.id)) {
+                            <div>
+                                <input type="submit">
+                            </div>
+                        }
+                    }
+                    case _ => {}
+                }
+                </td>
+                @if(job.ownerid == user.id) {
+                    <td>@file.state.toString</td>
+                }
+            </tr>
+        }
+        </tbody>
+    </table>
+}

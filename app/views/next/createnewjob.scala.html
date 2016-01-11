@@ -1,0 +1,22 @@
+@import model._
+@(implicit user:User)
+
+@next.main{
+    @helper.form(action = routes.Application.newjob) {
+        <div>
+            Job name
+        </div>
+        <input type="input" name="name">
+        <div>
+            Description
+        </div>
+        <textarea rows="10" cols="70" name="description"></textarea>
+        <div>
+            Form :
+        </div>
+        <textarea rows="10" cols="70" name="form"></textarea>
+        <div>
+            <input type="submit" class="btn">
+        </div>
+    }
+}
