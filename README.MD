@@ -1,3 +1,5 @@
+## Vulnerabilities: 
+    No check if current user permit to manage jobs
 ## Storage :
     For storing user data MongoDB is used with "to parent link" approach
     For storing files GridFS is used, because of nice api and non-blocking approach
